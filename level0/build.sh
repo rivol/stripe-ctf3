@@ -1,3 +1,3 @@
 #!/bin/sh
 
-# Add any build steps you need here
+g++ -std=c++0x -Wall -O2 -o level0 level0.cpp

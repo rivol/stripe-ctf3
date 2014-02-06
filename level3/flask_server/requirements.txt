@@ -1,0 +1,2 @@
+Flask
+suffix_array==0.9.18

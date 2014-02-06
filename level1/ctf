@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd /home/ubuntu/ctf
+
+nice -n5 python miner.py >> log3.txt 2>&1

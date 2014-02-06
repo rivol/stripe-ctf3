@@ -8,6 +8,47 @@ var checkServer = require('./network_simulation/lib/check_server');
 var nopt = require('nopt');
 var url = require('url');
 
+var requests_per_ip = {};
+var ip_heat_last = {};
+var ip_heat_counter = {};
+var req_counter = 0;
+var last_successful_req_timestamp = 0;
+
+function isBlacklisted(reqIp) {
+  var timestamp = (new Date()).getTime();
+  if ((timestamp - last_successful_req_timestamp) > 60) {
+    return false;
+  } else if (requests_per_ip[reqIp] > 10) {
+    return true;
+  } else if (ip_heat_last[reqIp] !== undefined && (timestamp - ip_heat_last[reqIp]) < 600 && ip_heat_counter[reqIp] > 8) {
+    ip_heat_last[reqIp] = timestamp;
+    return true;
+  } else {
+    return false;
+  }
+}
+function updateBlacklist(reqIp) {
+  if (requests_per_ip[reqIp] === undefined) {
+    requests_per_ip[reqIp] = 0;
+  }
+  requests_per_ip[reqIp]++;
+
+  var timestamp = (new Date()).getTime();
+  if ((timestamp - ip_heat_last[reqIp]) < 500) {
+    if (ip_heat_counter[reqIp] === undefined) {
+      ip_heat_counter[reqIp] = 0;
+    }
+    ip_heat_counter[reqIp]++;
+  } else {
+    ip_heat_counter[reqIp] = 0;
+  }
+  ip_heat_last[reqIp] = timestamp;
+
+  last_successful_req_timestamp = timestamp;
+
+  console.log("IP " + reqIp + " now has sent " + requests_per_ip[reqIp] + " reqs; heat is " + ip_heat_counter[reqIp]);
+}
+
 var RequestData = function (request, response, buffer) {
   this.request = request;
   this.response = response;
@@ -29,12 +70,18 @@ var Queue = function (proxies, parameters) {
 };
 Queue.prototype.takeRequest = function (reqData) {
   // Reject traffic as necessary:
-  // if (currently_blacklisted(ipFromRequest(reqData))) {
-  //   rejectRequest(reqData);
-  //   return;
-  // }
+  var reqIp = ipFromRequest(reqData);
+  if (isBlacklisted(reqIp)) {
+    console.log("IP " + reqIp + " REJECTED");
+    rejectRequest(reqData);
+    return;
+  }
+
   // Otherwise proxy it through:
-  this.proxies[0].proxyRequest(reqData.request, reqData.response, reqData.buffer);
+  updateBlacklist(reqIp);
+  req_counter++;
+  var proxy_i = req_counter % this.proxies.length;
+  this.proxies[proxy_i].proxyRequest(reqData.request, reqData.response, reqData.buffer);
 };
 Queue.prototype.requestFinished = function () {
   return;
